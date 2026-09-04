@@ -1,0 +1,51 @@
+import pandas as pd
+
+# 1. Load your CSV from Downloads
+df = pd.read_csv("C:/Users/Ravin/Downloads/CARICOMDATA.csv")
+
+# 2. Drop any completely empty rows (just in case)
+df = df.dropna(how='all')
+
+# 3. Identify year columns (they contain "YR")
+value_vars = [col for col in df.columns if "YR" in col]
+
+# 4. Reshape wide → long
+df_long = df.melt(
+    id_vars=["Country Name", "Country Code", "Series Name", "Series Code"],
+    value_vars=value_vars,
+    var_name="Year",
+    value_name="GDP_growth"
+)
+
+# 5. Clean Year column: extract numeric year from "2000 [YR2000]"
+df_long["Year"] = df_long["Year"].str.extract(r"(\d+)").astype(int)
+
+# 6. Keep only useful columns
+df_long = df_long[["Country Name", "Country Code", "Year", "GDP_growth"]]
+
+# 7. Add treatment, post, and DiD interaction
+df_long["treatment"] = (df_long["Country Name"] == "Guyana").astype(int)
+df_long["post"] = (df_long["Year"] >= 2015).astype(int)
+df_long["did"] = df_long["treatment"] * df_long["post"]
+
+# 8. Save cleaned panel dataset back to Downloads
+output_path = "C:/Users/Ravin/Downloads/Guyana_CARICOM_GDP_long.csv"
+df_long.to_csv(output_path, index=False)
+
+print("Panel dataset created successfully!")
+print(f"Saved to: {output_path}")
+print(df_long.head())
+
+import pandas as pd
+import statsmodels.formula.api as smf
+
+# Load your cleaned panel dataset
+df = pd.read_csv("C:/Users/Ravin/Downloads/Guyana_CARICOM_GDP_long.csv")
+
+# Difference-in-Differences model with country + year fixed effects
+model = smf.ols(
+    formula="GDP_growth ~ did + C(Year) + C(Country_Name)",
+    data=df.rename(columns={"Country Name": "Country_Name"})
+).fit()
+
+print(model.summary())
